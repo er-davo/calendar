@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Календарь</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    form, .controls { margin-bottom: 1rem; }
+    input, button, select, textarea { margin: 0.3rem; padding: 0.3rem; }
+    .event { border: 1px solid #ccc; margin: 0.5rem 0; padding: 0.5rem; }
+    .event button { margin-left: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>Календарь</h1>
+
+  <!-- Форма добавления события -->
+  <form id="event-form">
+    <input type="number" id="create-user_id" placeholder="User ID" required>
+    <input type="text" id="title" placeholder="Название" required>
+    <textarea id="description" placeholder="Описание"></textarea>
+    <input type="date" id="date" required>
+    <button type="submit">Добавить событие</button>
+  </form>
+
+  <!-- Фильтр и загрузка событий -->
+  <div class="controls">
+    <label>User ID: <input type="number" id="filter-user_id"></label>
+    <label>Дата: <input type="date" id="filter-date"></label>
+    <select id="period">
+      <option value="day">День</option>
+      <option value="week">Неделя</option>
+      <option value="month">Месяц</option>
+    </select>
+    <button id="load">Загрузить события</button>
+  </div>
+
+  <h2>События</h2>
+  <div id="events"></div>
+
+  <script>
+    const form = document.getElementById('event-form');
+    const eventsDiv = document.getElementById('events');
+    const periodSelect = document.getElementById("period");
+
+    async function loadEvents() {
+      eventsDiv.innerHTML = "";
+      const userId = document.getElementById("filter-user_id").value;
+      const date = document.getElementById("filter-date").value;
+      const period = periodSelect.value;
+      if (!userId || !date) return;
+
+      const url = `/events_for_${period}?user_id=${userId}&date=${date}`;
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (data.result && data.result.length > 0) {
+        data.result.forEach(e => {
+          const div = document.createElement("div");
+          div.className = "event";
+          const eventDate = new Date(e.date).toLocaleDateString("ru-RU");
+          div.innerHTML = `
+            <b>${e.title}</b> (${eventDate})<br>
+            ${e.description ? `<i>${e.description}</i><br>` : ""}
+            <button onclick="deleteEvent(${e.ID}, ${e.user_id})">Удалить</button>
+            <button onclick="editEvent(${e.ID}, ${e.user_id}, '${e.title}', '${e.description}', '${e.date}')">Редактировать</button>
+          `;
+          eventsDiv.appendChild(div);
+        });
+      } else {
+        eventsDiv.textContent = "Событий нет";
+      }
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const userId = document.getElementById("create-user_id").value;
+      const title = document.getElementById("title").value;
+      const description = document.getElementById("description").value;
+      const date = document.getElementById("date").value;
+
+      const res = await fetch("/create_event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          user_id: parseInt(userId), 
+          title, 
+          description, 
+          date 
+        })
+      });
+
+      if (res.ok) {
+        await loadEvents();
+        form.reset();
+      } else {
+        alert("Ошибка при добавлении события");
+      }
+    });
+
+    async function deleteEvent(id, userId) {
+      const res = await fetch("/delete_event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, user_id: userId })
+      });
+      if (res.ok) {
+        await loadEvents();
+      } else {
+        alert("Ошибка при удалении");
+      }
+    }
+
+    async function editEvent(id, userId, oldTitle, oldDesc, oldDate) {
+      const title = prompt("Введите новое название:", oldTitle);
+      const description = prompt("Введите новое описание:", oldDesc);
+      const date = prompt("Введите новую дату (YYYY-MM-DD):", oldDate.split("T")[0]);
+      if (!title || !date) return;
+
+      const res = await fetch("/update_event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, user_id: userId, title, description, date })
+      });
+
+      if (res.ok) {
+        await loadEvents();
+      } else {
+        alert("Ошибка при обновлении");
+      }
+    }
+
+    document.getElementById("load").addEventListener("click", loadEvents);
+  </script>
+</body>
+</html>
